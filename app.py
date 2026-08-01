@@ -197,10 +197,18 @@ def main():
                         all_verses.extend(verses)
                     
                     json_str = json.dumps(all_verses, ensure_ascii=False, indent=2)
+                    # Name the file after the selected book(s):
+                    # single book -> e.g. MAT.json
+                    # multiple books -> e.g. amharic_bible_combined.json
+                    selected_abbrs = [book_options[bl][1]["abbr"] for bl in selected_books]
+                    if len(selected_abbrs) == 1:
+                        file_name = f"{selected_abbrs[0]}.json"
+                    else:
+                        file_name = "amharic_bible_combined.json"
                     st.download_button(
                         label="⬇️ Download Combined JSON",
                         data=json_str,
-                        file_name="amharic_bible_combined.json",
+                        file_name=file_name,
                         mime="application/json",
                         width="stretch"
                     )
