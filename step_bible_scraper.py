@@ -137,6 +137,39 @@ def parse_verse_span(el_text):
     return clean
 
 
+def aggregate_verses(verse_fragments):
+    """
+    Combine individual text snippets that belong to the same verse number into
+    a single complete verse.
+
+    On STEP Bible, one logical verse (e.g. MAT.1.2) is often split across
+    multiple HTML blocks (`<span data-osisid="Matt.1.2">`), each holding a
+    portion of the text. Naively returning them separately loses the 2nd/3rd
+    snippets. This merges all fragments with the same (book, chapter, verse)
+    into one verse whose text is the concatenation of all fragments.
+
+    verse_fragments: list of dicts >= {"book", "chapter", "verse", "text"}
+    Returns:         list of merged dicts, preserving insertion order.
+    """
+    merged = {}
+    for frag in verse_fragments:
+        key = (frag["book"], frag["chapter"], frag["verse"])
+        if key not in merged:
+            merged[key] = {
+                "book": frag["book"],
+                "chapter": frag["chapter"],
+                "verse": frag["verse"],
+                "text": frag["text"],
+            }
+        else:
+            # Append subsequent snippets for the same verse number.
+            current = merged[key]["text"]
+            new = frag["text"]
+            if new and new not in current:
+                merged[key]["text"] = f"{current} {new}".strip()
+    return list(merged.values())
+
+
 # ---------------------------------------------------------------------------
 # Selenium-based extraction (improved logic: span[data-osisid])
 # ---------------------------------------------------------------------------
@@ -199,7 +232,11 @@ def get_chapter_selenium(book_id, chapter):
                     "verse": verse_num if verse_num else 0,
                     "text": clean_text,
                 })
-        return verses
+
+        # STEP Bible often splits one logical verse across multiple
+        # `span[data-osisid]` blocks (e.g. MAT.1.2 is 3 blocks). Aggregate all
+        # snippets sharing the same verse number into one complete verse.
+        return aggregate_verses(verses)
     finally:
         driver.quit()
 
