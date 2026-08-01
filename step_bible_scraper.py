@@ -273,21 +273,40 @@ def get_book_verses(book_id, book_name):
 
 # Small self-test helper for quick CLI verification
 if __name__ == "__main__":
-    import sys
+    # When this module is run directly (e.g. as a Streamlit main file, or a
+    # plain CLI script), detect the environment:
+    try:
+        import streamlit  # noqa: F401
+        try:
+            from streamlit.runtime import exists as _st_runtime_exists
+            is_streamlit = bool(_st_runtime_exists())
+        except Exception:
+            is_streamlit = os.environ.get("STREAMLIT_RUNTIME", "").strip().lower() \
+                in ("1", "true", "yes")
+    except Exception:
+        is_streamlit = False
 
-    test_book = int(sys.argv[1]) if len(sys.argv) > 1 else 40  # Matt
-    test_ch = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-    test_name = "ማቴዎስ" if test_book == 40 else BOOK_OSIS.get(test_book, "?")
+    if is_streamlit:
+        # Running as a Streamlit app -> launch the full UI.
+        import app
+        app.main()
+    else:
+        # Plain CLI self-test.
+        import sys
 
-    print(f"Fetching {BOOK_OSIS.get(test_book)} {test_ch} via "
-          f"{'Selenium' if check_selenium_available() else 'REST API'} ...")
-    verses = get_chapter(test_book, test_ch)
-    print(f"Got {len(verses)} verses")
-    for v in verses:
-        if v["verse"] == 22:
-            print("Verse 22:", v["text"])
-            break
-    if test_book == 40:
-        all_v = get_book_verses(40, test_name)
-        print(f"Full Matthew: {len(all_v)} verses, "
-              f"first: {all_v[0]['text'][:30]}...")
+        test_book = int(sys.argv[1]) if len(sys.argv) > 1 else 40  # Matt
+        test_ch = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+        test_name = "ማቴዎስ" if test_book == 40 else BOOK_OSIS.get(test_book, "?")
+
+        print(f"Fetching {BOOK_OSIS.get(test_book)} {test_ch} via "
+              f"{'Selenium' if check_selenium_available() else 'REST API'} ...")
+        verses = get_chapter(test_book, test_ch)
+        print(f"Got {len(verses)} verses")
+        for v in verses:
+            if v["verse"] == 22:
+                print("Verse 22:", v["text"])
+                break
+        if test_book == 40:
+            all_v = get_book_verses(40, test_name)
+            print(f"Full Matthew: {len(all_v)} verses, "
+                  f"first: {all_v[0]['text'][:30]}...")
