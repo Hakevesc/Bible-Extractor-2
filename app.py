@@ -1,9 +1,10 @@
 import streamlit as st
 import json
-import requests
 import os
 from io import BytesIO
 import zipfile
+
+import step_bible_scraper as sb
 
 # Bible book abbreviations and categories
 BIBLE_BOOKS = {
@@ -79,42 +80,15 @@ BIBLE_BOOKS = {
     }
 }
 
-@st.cache_data
-def load_bible_data():
-    """Load Bible data from GitHub repository"""
-    url = "https://raw.githubusercontent.com/magna25/amharic-bible-json/main/amharic_bible.json"
+@st.cache_data(ttl="1d", max_entries=10)
+def load_book_verses(book_id, book_name):
+    """Fetch a book's verses from STEP Bible (Selenium if available,
+    otherwise the REST API fallback)."""
     try:
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        return response.json()
+        return sb.get_book_verses(book_id, book_name)
     except Exception as e:
-        st.error(f"Error loading Bible data: {e}")
-        return None
-
-def format_book_verses(book_data, book_id, book_info):
-    """Format book data into the requested JSON structure"""
-    formatted_verses = []
-    chapters = book_data.get("chapters", [])
-    
-    for chap in chapters:
-        chapter_num_str = chap.get("chapter", "0")
-        try:
-            chapter_num = int(chapter_num_str)
-        except ValueError:
-            chapter_num = 0
-            
-        verses = chap.get("verses", [])
-        for verse_index, verse_text in enumerate(verses, start=1):
-            clean_text = str(verse_text).strip()
-            if clean_text:
-                formatted_verses.append({
-                    "book_name": book_info["name"],
-                    "book": book_id,
-                    "chapter": chapter_num,
-                    "verse": verse_index,
-                    "text": clean_text
-                })
-    return formatted_verses
+        st.error(f"Error fetching book data: {e}")
+        return []
 
 def main():
     st.set_page_config(
@@ -126,13 +100,11 @@ def main():
     st.title(" Amharic Bible JSON Downloader")
     st.markdown("---")
     
-    # Load data
-    with st.spinner("Loading Bible data..."):
-        bible_data = load_bible_data()
-    
-    if bible_data is None:
-        st.error("Failed to load Bible data. Please try again later.")
-        return
+    st.info(
+        f"Data source: STEP Bible ({sb.AMHARIC_VERSION}) · "
+        f"Uses Selenium (`span[data-osisid]`) when a browser is available, "
+        f"otherwise the STEP Bible REST API."
+    )
     
     # Sidebar for category selection
     st.sidebar.header("📚 Download Options")
@@ -194,7 +166,7 @@ def main():
     )
     
     if st.button("📥 Download Selected Books", type="primary", width="stretch"):
-        with st.spinner("Preparing download..."):
+        with st.spinner("Fetching selected books from STEP Bible..."):
             try:
                 if download_format == "Individual JSON Files (ZIP)":
                     # Create ZIP file with individual JSON files
@@ -202,14 +174,8 @@ def main():
                     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                         for book_label in selected_books:
                             book_id, info = book_options[book_label]
-                            
-                            # Find the book in raw data
-                            books_list = bible_data.get("books", [])
-                            if book_id <= len(books_list):
-                                book_data = books_list[book_id - 1]
-                                verses = format_book_verses(book_data, book_id, info)
-                                
-                                # Create JSON file
+                            verses = load_book_verses(book_id, info["name"])
+                            if verses:
                                 json_str = json.dumps(verses, ensure_ascii=False, indent=2)
                                 zip_file.writestr(f"{info['abbr']}.json", json_str)
                     
@@ -227,12 +193,8 @@ def main():
                     all_verses = []
                     for book_label in selected_books:
                         book_id, info = book_options[book_label]
-                        
-                        books_list = bible_data.get("books", [])
-                        if book_id <= len(books_list):
-                            book_data = books_list[book_id - 1]
-                            verses = format_book_verses(book_data, book_id, info)
-                            all_verses.extend(verses)
+                        verses = load_book_verses(book_id, info["name"])
+                        all_verses.extend(verses)
                     
                     json_str = json.dumps(all_verses, ensure_ascii=False, indent=2)
                     st.download_button(
@@ -252,7 +214,7 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style='text-align: center; color: gray;'>
-        <p>Amharic Bible JSON Downloader | Data source: Open-source Amharic Bible</p>
+        <p>Amharic Bible JSON Downloader | Data source: STEP Bible (AmhNASV)</p>
     </div>
     """, unsafe_allow_html=True)
 
