@@ -266,6 +266,14 @@ def get_chapter_rest(book_id, chapter):
         raise RuntimeError(data["errorMessage"])
 
     raw_html = data.get("value", "")
+    # The REST API response contains empty decorative spans (e.g.
+    # <span class='level1'></span>) nested inside verse spans.  Because the
+    # verse regex uses a non-greedy `(.*?)</span>`, the inner `</span>` was
+    # matched first — silently truncating multi-line verses.  Stripping the
+    # empty spans first ensures the regex terminates at the verse's own
+    # closing tag.
+    raw_html = re.sub(r"<span[^>]*>\s*</span>", "", raw_html)
+
     # Each verse is a <span ... class='verse ltrDirection'>...</span>.
     # In the AmhNASV text, verses are rendered as a flat sequence of these
     # spans within the chapter.
