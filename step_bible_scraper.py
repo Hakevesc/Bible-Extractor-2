@@ -64,16 +64,23 @@ BOOK_CHAPTERS = {
 # ---------------------------------------------------------------------------
 
 def check_selenium_available():
-    """Return True only if a real browser can be driven via Selenium."""
+    """Return True only if a real browser can be driven via Selenium.
+
+    Always returns False on hosted platforms (Streamlit Cloud etc.) and when
+    STEP_FORCE_REST=1 is set, so the fast REST path is used and the app can
+    never hang waiting for a browser during startup.
+    """
+    # Hosted platforms: never attempt Selenium (no browser / could hang).
+    if os.environ.get("STREAMLIT_RUNTIME"):
+        return False
+    # Explicit override: always use the REST API.
+    if os.environ.get("STEP_FORCE_REST", "").strip().lower() in ("1", "true", "yes"):
+        return False
+
     try:
         from selenium import webdriver  # noqa: F401
         from selenium.webdriver.chrome.options import Options  # noqa: F401
     except Exception:
-        return False
-
-    # On hosted platforms (Streamlit Cloud etc.) a browser is not installed,
-    # so Selenium cannot be used; fall back to the REST API.
-    if os.environ.get("STREAMLIT_RUNTIME"):
         return False
 
     chrome_candidates = [
@@ -84,6 +91,17 @@ def check_selenium_available():
         "/usr/bin/chromium-browser",
     ]
     return any(os.path.exists(c) for c in chrome_candidates)
+
+
+def get_chapter(book_id, chapter):
+    """Try Selenium first; fall back to the REST API when no browser exists."""
+    if check_selenium_available():
+        try:
+            return get_chapter_selenium(book_id, chapter)
+        except Exception:
+            # Fall through to the REST API on any Selenium/browser failure
+            pass
+    return get_chapter_rest(book_id, chapter)
 
 
 def _extract_verse_number_from_osis(osis_id):
@@ -233,17 +251,6 @@ def get_chapter_rest(book_id, chapter):
                 "text": text,
             })
     return verses
-
-
-def get_chapter(book_id, chapter):
-    """Try Selenium first; fall back to the REST API when no browser exists."""
-    if check_selenium_available():
-        try:
-            return get_chapter_selenium(book_id, chapter)
-        except Exception:
-            # Fall through to the REST API on any Selenium/browser failure
-            pass
-    return get_chapter_rest(book_id, chapter)
 
 
 def get_book_verses(book_id, book_name):
