@@ -124,24 +124,39 @@ def main():
     else:
         available_books = BIBLE_BOOKS["New Testament"]
     
-    # Create book options for multiselect
+    # Create book options map
     book_options = {f"{info['abbr']} - {info['name']}": (book_id, info) 
                     for book_id, info in available_books.items()}
     
-    selected_books = st.sidebar.multiselect(
-        "Select Book(s) to Download",
-        options=list(book_options.keys()),
-        help="Hold Ctrl (or Cmd on Mac) to select multiple books"
-    )
+    st.sidebar.subheader("Select Book(s) to Download")
     
     # Quick select buttons
-    col1, col2, col3 = st.sidebar.columns(3)
-    with col1:
-        if st.button("Select All"):
-            st.session_state.selected = list(book_options.keys())
-    with col2:
-        if st.button("Clear"):
-            st.session_state.selected = []
+    col1, col2 = st.sidebar.columns(2)
+    if col1.button("Select All", use_container_width=True):
+        for label in book_options.keys():
+            st.session_state[f"chk_{label}"] = True
+    if col2.button("Clear All", use_container_width=True):
+        for label in book_options.keys():
+            st.session_state[f"chk_{label}"] = False
+
+    # Render books vertically as checkboxes
+    selected_books = []
+    if category == "All Books":
+        for cat_name, books in BIBLE_BOOKS.items():
+            st.sidebar.markdown(f"**{cat_name}**")
+            for book_id, info in books.items():
+                label = f"{info['abbr']} - {info['name']}"
+                if f"chk_{label}" not in st.session_state:
+                    st.session_state[f"chk_{label}"] = False
+                if st.sidebar.checkbox(label, key=f"chk_{label}"):
+                    selected_books.append(label)
+    else:
+        for book_id, info in available_books.items():
+            label = f"{info['abbr']} - {info['name']}"
+            if f"chk_{label}" not in st.session_state:
+                st.session_state[f"chk_{label}"] = False
+            if st.sidebar.checkbox(label, key=f"chk_{label}"):
+                selected_books.append(label)
     
     # Main content area
     st.header("Download Amharic Bible Books")
@@ -161,15 +176,39 @@ def main():
     st.markdown("---")
     download_format = st.radio(
         "Download Format",
-        ["Individual JSON Files (ZIP)", "Single Combined JSON File"],
+        ["Single Combined JSON File", "Individual JSON Files (ZIP)"],
+        index=0,
         horizontal=True
     )
     
-    if st.button("📥 Download Selected Books", type="primary", width="stretch"):
+    if st.button("📥 Download Selected Books", type="primary", use_container_width=True):
         with st.spinner("Fetching selected books from STEP Bible..."):
             try:
-                if download_format == "Individual JSON Files (ZIP)":
-                    # Create ZIP file with individual JSON files
+                if download_format == "Single Combined JSON File":
+                    # Single combined JSON file
+                    all_verses = []
+                    for book_label in selected_books:
+                        book_id, info = book_options[book_label]
+                        verses = load_book_verses(book_id, info["name"])
+                        all_verses.extend(verses)
+                    
+                    json_str = json.dumps(all_verses, ensure_ascii=False, indent=2)
+                    # Name the file after the selected book(s):
+                    selected_abbrs = [book_options[bl][1]["abbr"] for bl in selected_books]
+                    if len(selected_abbrs) == 1:
+                        file_name = f"{selected_abbrs[0]}.json"
+                    else:
+                        file_name = "amharic_bible_combined.json"
+                    st.download_button(
+                        label="⬇️ Download Combined JSON",
+                        data=json_str,
+                        file_name=file_name,
+                        mime="application/json",
+                        use_container_width=True
+                    )
+                
+                else:
+                    # Individual JSON Files (ZIP)
                     zip_buffer = BytesIO()
                     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                         for book_label in selected_books:
@@ -185,32 +224,7 @@ def main():
                         data=zip_buffer,
                         file_name="amharic_bible_books.zip",
                         mime="application/zip",
-                        width="stretch"
-                    )
-                
-                else:
-                    # Single combined JSON file
-                    all_verses = []
-                    for book_label in selected_books:
-                        book_id, info = book_options[book_label]
-                        verses = load_book_verses(book_id, info["name"])
-                        all_verses.extend(verses)
-                    
-                    json_str = json.dumps(all_verses, ensure_ascii=False, indent=2)
-                    # Name the file after the selected book(s):
-                    # single book -> e.g. MAT.json
-                    # multiple books -> e.g. amharic_bible_combined.json
-                    selected_abbrs = [book_options[bl][1]["abbr"] for bl in selected_books]
-                    if len(selected_abbrs) == 1:
-                        file_name = f"{selected_abbrs[0]}.json"
-                    else:
-                        file_name = "amharic_bible_combined.json"
-                    st.download_button(
-                        label="⬇️ Download Combined JSON",
-                        data=json_str,
-                        file_name=file_name,
-                        mime="application/json",
-                        width="stretch"
+                        use_container_width=True
                     )
                 
                 st.success("✅ Download ready!")
